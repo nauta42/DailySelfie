@@ -7,5 +7,7 @@
     <string name="no_camera">No camera present, can\'t take photos!</string>
     <string name="take_selfie">Take a new selfie!</string>
     <string name="help_guide">Press and take a photo\n of yourself!</string>
+    <string name="selfies_dirname">MySelfies</string>
+    
 
 </resources>
