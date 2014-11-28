@@ -28,6 +28,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
+import android.widget.Gallery;
 import android.widget.ImageView;
 import android.widget.ShareActionProvider;
 import android.widget.Toast;
@@ -36,8 +37,10 @@ import android.widget.ToggleButton;
 public class SelfieActivity extends Activity {
 	private static final String TAG = "Daily-Selfie-App"; 
 	private ImageView mImageView1;
+	private ImageView mImageView2;
+	private Gallery mGallery1;
 	private ToggleButton mToggleButton1;
-	private static final int CODE_TAKE_SELFIE = 1;
+	private static final int REQUEST_TAKE_SELFIE = 1;
 	private String mCurrentSelfiePath;
 	private static final String SELFIE_FILE_PREFIX = "SELFIE_";
 	private static final String SELFIE_FILE_SUFFIX = ".jpg";
@@ -54,6 +57,8 @@ public class SelfieActivity extends Activity {
 		setContentView(R.layout.selfie_main_layout);
 		//
 		mImageView1 = (ImageView) findViewById(R.id.imageView1);
+		mImageView2 = (ImageView) findViewById(R.id.imageView2);
+		mGallery1 = (Gallery) findViewById(R.id.gallery1);
 		registerForContextMenu(mImageView1);  //N42 Long presses invoke Context Menu
 		//
 		mToggleButton1 = (ToggleButton) findViewById(R.id.toggleButton1);
@@ -78,11 +83,10 @@ public class SelfieActivity extends Activity {
 			mToggleButton1.setChecked(false);
 			invalidateOptionsMenu();
 		}
-		//TODO foto sale girada 90°: gestión cambio orientación pantalla
 		//N42 get display rotation
 		mDisplay = ((WindowManager) getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay(); 
 		int rot = mDisplay.getRotation();Log.d(TAG, "Display rotation: " + rot);
-		//TODO
+		//
 		mImageBitmap = null;
 		//
 
@@ -107,7 +111,7 @@ public class SelfieActivity extends Activity {
 			selfieFile = null;
 			mCurrentSelfiePath = null;
 		}
-		startActivityForResult(takePictureIntent, CODE_TAKE_SELFIE);
+		startActivityForResult(takePictureIntent, REQUEST_TAKE_SELFIE);
 	}
 
 	private File getSelfiesDir() {
@@ -129,7 +133,11 @@ public class SelfieActivity extends Activity {
 
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		if (requestCode == CODE_TAKE_SELFIE && resultCode == RESULT_OK) {
+		if (requestCode == REQUEST_TAKE_SELFIE && resultCode == RESULT_OK) {
+			//get the thumbnail
+			//Bundle extras = data.getExtras();
+			//Bitmap thumbnailBitmap = (Bitmap) extras.get("data");
+	        //mImageView2.setImageBitmap(thumbnailBitmap);
 			if (mCurrentSelfiePath != null) {
 				setPic();
 				galleryAddPic();
@@ -154,6 +162,7 @@ public class SelfieActivity extends Activity {
 		
 		/* Figure out which way needs to be reduced less */
 		int scaleFactor = 1;
+		//N42 TODO would be instead: (targetW > 0) && (targetH > 0) ??
 		if ((targetW > 0) || (targetH > 0)) {
 			scaleFactor = Math.min(photoW/targetW, photoH/targetH);	
 		}
@@ -164,6 +173,7 @@ public class SelfieActivity extends Activity {
 		bmOptions.inPurgeable = true;
 
 		//N42 problema camara rotada
+		int rotateDegrees = 0;
 		ExifInterface ei;
 		int orientation;
 		try {
@@ -172,31 +182,41 @@ public class SelfieActivity extends Activity {
 			Log.d(TAG, "Exif ORIENTATION: " + orientation);
 			switch(orientation) {
 		    case ExifInterface.ORIENTATION_NORMAL:
-				Log.d(TAG, "Exif ORIENTATION_NORMAL");
+		    	rotateDegrees = 0;
+				Log.d(TAG, "Exif ORIENTATION_NORMAL, rotate(degrees): " + rotateDegrees);
 		        break;
 		    case ExifInterface.ORIENTATION_ROTATE_90:
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_90");
+		    	rotateDegrees = 90;
+				Log.d(TAG, "Exif ORIENTATION_ROTATE_90, rotate(degrees): " + rotateDegrees);
 		        break;
 		    case ExifInterface.ORIENTATION_ROTATE_180:
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_180");
+		    	rotateDegrees = 180;
+				Log.d(TAG, "Exif ORIENTATION_ROTATE_180, rotate(degrees): " + rotateDegrees);
 		        break;
 		    case ExifInterface.ORIENTATION_ROTATE_270:
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_270");
+		    	rotateDegrees = 270;
+				Log.d(TAG, "Exif ORIENTATION_ROTATE_270, rotate(degrees): " + rotateDegrees);
 		        break;
 		    default:
-				Log.d(TAG, "Exif ORIENTATION_UNDEFINED or OTHERS");
+				Log.d(TAG, "Exif ORIENTATION_UNDEFINED or OTHERS, rotate(degrees): " + rotateDegrees);
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		};
-		
 		/* Decode the JPEG file into a Bitmap */
-		Bitmap bitmap = BitmapFactory.decodeFile(mCurrentSelfiePath, bmOptions);
-		Bitmap bitmap2 = RotateBitmap(bitmap, 270);
-
+		Bitmap bitmap1 = BitmapFactory.decodeFile(mCurrentSelfiePath, bmOptions);
+		//N42 rotate the bitmap, recycles bitmap
+		bitmap1 = RotateBitmap(bitmap1, rotateDegrees);
 		/* Associate the Bitmap to the ImageView */
-		mImageView1.setImageBitmap(bitmap2);
+		mImageView1.setImageBitmap(bitmap1);
 		mImageView1.setVisibility(View.VISIBLE);
+
+		//thumbnail from bitmap already rotated
+		mImageView2.setMaxHeight(targetH/3);
+		mImageView2.setMaxWidth(targetW/3);
+		//Bitmap bitmap2 = Bitmap.createScaledBitmap(bitmap1, mImageView2.getWidth(), mImageView2.getHeight(), false);
+		mImageView2.setImageBitmap(bitmap1);
+		mImageView2.setVisibility(View.VISIBLE);
 	}
 
 	private void galleryAddPic() {
