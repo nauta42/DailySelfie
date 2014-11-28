@@ -2,14 +2,28 @@
     xmlns:tools="http://schemas.android.com/tools"
     tools:context="dailyselfie.app1.SelfieActivity" >
 
-    <item
-        android:id="@+id/menu_action_settings"
-        android:orderInCategory="100"
-        android:showAsAction="never"
-        android:title="@string/action_settings"/>
+    
     <item
         android:id="@+id/menu_take_selfie"
         android:icon="@android:drawable/ic_menu_camera"
+        android:showAsAction="always"
         android:title="@string/take_selfie"/>
-
+    <item
+        android:id="@+id/menu_action_share"
+        android:icon="@android:drawable/ic_menu_camera"
+        android:showAsAction="ifRoom"
+        android:title="@string/action_share"
+        android:actionProviderClass="android.widget.ShareActionProvider"/>
+    <item
+        android:id="@+id/menu_action_settings"
+        android:orderInCategory="100"
+        android:showAsAction="ifRoom"
+        android:title="@string/action_settings"
+        android:icon="@android:drawable/ic_menu_preferences"/>
+    <item
+        android:id="@+id/menu_about"
+        android:showAsAction="never"
+        android:title="@string/about"
+        android:icon="@android:drawable/ic_menu_preferences"/>
+    
 </menu>

@@ -5,14 +5,10 @@ import java.io.IOException;
 import java.util.Date;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
-import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -21,22 +17,26 @@ import android.text.format.DateFormat;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.view.Display;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.WindowManager;
+import android.view.View.OnClickListener;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.ImageView;
-import android.widget.ShareActionProvider;
 import android.widget.Toast;
 import android.widget.ToggleButton;
 
-public class SelfieActivity extends Activity {
+public class SelfieActivity_a01 extends Activity {
 	private static final String TAG = "Daily-Selfie-App"; 
+	// Usually there are camera(s) and camera apps presents
+	private boolean hasCamera = false;
+	private boolean hasCameraApp = false;
+	private int nCameraApps = 0;
 	private ImageView mImageView1;
 	private ToggleButton mToggleButton1;
+	private Button mButton1;
 	private static final int CODE_TAKE_SELFIE = 1;
 	private String mCurrentSelfiePath;
 	private static final String SELFIE_FILE_PREFIX = "SELFIE_";
@@ -44,48 +44,51 @@ public class SelfieActivity extends Activity {
 	private static final String BITMAP_STORAGE_KEY = "viewbitmap";
 	private static final String IMAGEVIEW_VISIBILITY_STORAGE_KEY = "imageviewvisibility";
 	private Bitmap mImageBitmap;
-	private ShareActionProvider mShareActionProvider;
-	private PhotoTaking mPhotoTaking;
-	private Display mDisplay;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.selfie_main_layout);
-		//
+		setContentView(R.layout.test_foto_simple_a01);
 		mImageView1 = (ImageView) findViewById(R.id.imageView1);
 		registerForContextMenu(mImageView1);  //N42 Long presses invoke Context Menu
+		mImageBitmap = null;
 		//
 		mToggleButton1 = (ToggleButton) findViewById(R.id.toggleButton1);
 		mToggleButton1.setOnCheckedChangeListener(new OnCheckedChangeListener() {
 			@Override
 			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
 				//
-				Log.d(TAG, "ToogleButton state: " + isChecked);
+				Log.i(TAG, "ToogleButton state: " + isChecked);
 				if(isChecked){
-					if(!mPhotoTaking.enable().isEnabled()) {
+					if(verifyCamera()) {
+						enableCamera();
+					} else {
+						disableCamera();
 						buttonView.toggle();
 					}
 				} else {
-					mPhotoTaking.disable();  //N42 disable photo taking
+					disableCamera();
 				}
-				invalidateOptionsMenu(); //
 			}
 		});
-		//verify if is posible photo taking
-		mPhotoTaking = new PhotoTaking();
-		if (!mPhotoTaking.isEnabled()) {
-			mToggleButton1.setChecked(false);
-			invalidateOptionsMenu();
-		}
-		//TODO foto sale girada 90°: gestión cambio orientación pantalla
-		//N42 get display rotation
-		mDisplay = ((WindowManager) getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay(); 
-		int rot = mDisplay.getRotation();Log.d(TAG, "Display rotation: " + rot);
-		//TODO
-		mImageBitmap = null;
+		//to take the photo
+		mButton1 = (Button) findViewById(R.id.button1);
+		mButton1.setOnClickListener(new OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				//
+				Toast.makeText(getApplicationContext(),
+						getText(R.string.take_selfie),
+						Toast.LENGTH_LONG).show();
+				takeSelfie();
+			}
+		});
 		//
-
+		//
+		//verify if camera present
+		if(!verifyCamera()) {
+			mToggleButton1.setChecked(false);
+		}
 	}
 
 	//N42 Dispatch an intent for other app take the selfie
@@ -93,14 +96,13 @@ public class SelfieActivity extends Activity {
 		Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 		File selfieFile = null;
 		try {
-			// Create a temporal file
+			// Create an image file name
 			String timeStamp = (String) DateFormat.format("yyyyMMdd_HHmmss", new Date());
 			String imageFileName = SELFIE_FILE_PREFIX + timeStamp + "_";
 			selfieFile = File.createTempFile(imageFileName, SELFIE_FILE_SUFFIX, getSelfiesDir());
-			Log.d(TAG, "selfieFile: " + selfieFile.getName());
+			Log.i(TAG, "selfieFile: " + selfieFile.getName());
 			mCurrentSelfiePath = selfieFile.getAbsolutePath();
-			Log.d(TAG, "mCurrentSelfiePath: " + mCurrentSelfiePath);
-			//completes intent
+			Log.i(TAG, "mCurrentSelfiePath: " + mCurrentSelfiePath);
 			takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(selfieFile));
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -108,6 +110,13 @@ public class SelfieActivity extends Activity {
 			mCurrentSelfiePath = null;
 		}
 		startActivityForResult(takePictureIntent, CODE_TAKE_SELFIE);
+	}
+
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		if (requestCode == CODE_TAKE_SELFIE && resultCode == RESULT_OK) {
+			handleBigCameraPhoto();
+		}
 	}
 
 	private File getSelfiesDir() {
@@ -127,20 +136,11 @@ public class SelfieActivity extends Activity {
 		return selfiesDir;
 	}
 
-	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		if (requestCode == CODE_TAKE_SELFIE && resultCode == RESULT_OK) {
-			if (mCurrentSelfiePath != null) {
-				setPic();
-				galleryAddPic();
-				mCurrentSelfiePath = null;
-			}
-		}
-	}
-
 	private void setPic() {
+
 		/* There isn't enough memory to open up more than a couple camera photos */
 		/* So pre-scale the target bitmap into which the file is decoded */
+
 		/* Get the size of the ImageView */
 		int targetW = mImageView1.getWidth();
 		int targetH = mImageView1.getHeight();
@@ -163,39 +163,11 @@ public class SelfieActivity extends Activity {
 		bmOptions.inSampleSize = scaleFactor;
 		bmOptions.inPurgeable = true;
 
-		//N42 problema camara rotada
-		ExifInterface ei;
-		int orientation;
-		try {
-			ei = new ExifInterface(mCurrentSelfiePath);
-			orientation = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-			Log.d(TAG, "Exif ORIENTATION: " + orientation);
-			switch(orientation) {
-		    case ExifInterface.ORIENTATION_NORMAL:
-				Log.d(TAG, "Exif ORIENTATION_NORMAL");
-		        break;
-		    case ExifInterface.ORIENTATION_ROTATE_90:
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_90");
-		        break;
-		    case ExifInterface.ORIENTATION_ROTATE_180:
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_180");
-		        break;
-		    case ExifInterface.ORIENTATION_ROTATE_270:
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_270");
-		        break;
-		    default:
-				Log.d(TAG, "Exif ORIENTATION_UNDEFINED or OTHERS");
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		};
-		
 		/* Decode the JPEG file into a Bitmap */
 		Bitmap bitmap = BitmapFactory.decodeFile(mCurrentSelfiePath, bmOptions);
-		Bitmap bitmap2 = RotateBitmap(bitmap, 270);
-
+		
 		/* Associate the Bitmap to the ImageView */
-		mImageView1.setImageBitmap(bitmap2);
+		mImageView1.setImageBitmap(bitmap);
 		mImageView1.setVisibility(View.VISIBLE);
 	}
 
@@ -207,19 +179,14 @@ public class SelfieActivity extends Activity {
 		    this.sendBroadcast(mediaScanIntent);
 	}
 
-	@Override
-	public void onConfigurationChanged(Configuration newConfig) {
-	    super.onConfigurationChanged(newConfig);
-	    // Checks the orientation of the screen
-	    if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-	    	Log.d(TAG, "LANSCAPE");
-	        Toast.makeText(this, "landscape", Toast.LENGTH_SHORT).show();
-	    } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT){
-	    	Log.d(TAG, "PORTRAIT");
-	        Toast.makeText(this, "portrait", Toast.LENGTH_SHORT).show();
-	    }
+	private void handleBigCameraPhoto() {
+		if (mCurrentSelfiePath != null) {
+			setPic();
+			galleryAddPic();
+			mCurrentSelfiePath = null;
+		}
 	}
-	
+
 	// Some lifecycle callbacks so that the image can survive orientation change
 	@Override
 	protected void onSaveInstanceState(Bundle outState) {
@@ -238,40 +205,59 @@ public class SelfieActivity extends Activity {
 						ImageView.VISIBLE : ImageView.INVISIBLE
 		);
 	}
+
+	//verify camera present, disable app behaviours if not
+	public boolean verifyCamera() {
+		hasCamera = getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA);
+		//num of apps that can respond this intent
+		nCameraApps = getApplicationContext().getPackageManager().queryIntentActivities(
+				new Intent(MediaStore.ACTION_IMAGE_CAPTURE),
+				PackageManager.MATCH_DEFAULT_ONLY).size();
+		Log.i(TAG, "# Camera Apps Founded: " + nCameraApps);
+		hasCameraApp = (nCameraApps > 0);
+		if (hasCamera && hasCameraApp) {
+			return true;
+		} else {
+			Toast.makeText(getApplicationContext(),
+					getText(R.string.no_camera),
+					Toast.LENGTH_LONG).show();
+			return false;
+		}
+	}
+
+	public void enableCamera() {
+		Log.i(TAG, "enableCamera()");
+		mButton1.setEnabled(true);
+	}
 	
-	//  ********** OPTIONS MENU ********** 
+	public void disableCamera() {
+		Log.i(TAG, "disableCamera()");
+		//disable button to take photos
+		mButton1.setEnabled(false);
+	}
+
+	
+	//N42 ** **** **** **** **** **** **MENUS** **** **** **** **** **** ** 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// Inflate the menu; this adds items to the action bar if it is present.
-		getMenuInflater().inflate(R.menu.selfie_menu, menu);
-		//N42 Set up ShareActionProvider
-		MenuItem menuItem = menu.findItem(R.id.menu_action_share);
-		mShareActionProvider = (ShareActionProvider) menuItem.getActionProvider();
-		mShareActionProvider.setShareIntent(new Intent(Intent.ACTION_SEND).setType("image/*"));
-		return super.onCreateOptionsMenu(menu);
+		getMenuInflater().inflate(R.menu.selfie_menu_a01, menu);
+		return true;
 	}
-	@Override
-	public boolean onPrepareOptionsMenu(Menu menu) {
-		//N42 disable photo taking
-		menu.findItem(R.id.menu_take_selfie).setEnabled(mPhotoTaking.isEnabled());
-		return super.onPrepareOptionsMenu(menu);
-	}
+
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
 		// Handle action bar item clicks here.
 		switch (item.getItemId()) {
 		case R.id.menu_take_selfie:
-			Log.d(TAG, "menu_take_selfie");
 			takeSelfie();
+			Toast.makeText(getApplicationContext(),
+					getText(R.string.take_selfie),
+					Toast.LENGTH_LONG).show();
 			return true;
 		case R.id.menu_action_settings:
 			Toast.makeText(getApplicationContext(),
 					getText(R.string.action_settings),
-					Toast.LENGTH_LONG).show();
-			return true;
-		case R.id.menu_about:
-			Toast.makeText(getApplicationContext(),
-					getText(R.string.about),
 					Toast.LENGTH_LONG).show();
 			return true;
 		default:
@@ -279,16 +265,18 @@ public class SelfieActivity extends Activity {
 		}
 	}
 
-	//  ********** Context Menu **********
+	//N42 Create Context Menu
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v,
 			ContextMenuInfo menuInfo) {
 		super.onCreateContextMenu(menu, v, menuInfo);
 		//N42 switch each context menu 
 		if(v.getId() == R.id.imageView1){
-			getMenuInflater().inflate(R.menu.selfie_context_menu, menu);
+			getMenuInflater().inflate(R.menu.selfie_context_menu_a01, menu);
 		}
 	}
+
+	//N42 Process clicks on Context Menu Items
 	@Override
 	public boolean onContextItemSelected(MenuItem item) {
 		//N42 ignore logcat ERROR for SAMSUNG GALAXY S3
@@ -305,64 +293,6 @@ public class SelfieActivity extends Activity {
 			return true;
 		default:
 			return false;
-		}
-	}
-	
-	//  ********** Helper class **********
-	public static Bitmap RotateBitmap(Bitmap source, float angle)
-	{
-	      Matrix matrix = new Matrix();
-	      matrix.postRotate(angle);
-	      return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
-	}
-	
-	//  ********** Helper class **********
-	class PhotoTaking {
-		//states
-		private boolean enabled = false;
-		private boolean abled = false;
-		//usually there are camera(s) and camera apps presents but..
-		private boolean hasCamera = false;
-		private int nCameraApps = 0;
-		private boolean hasCameraApp = false;
-		//N42 by default enable
-		public PhotoTaking() {
-			this.enabled = isAbled();
-		}
-		//N42 verify if can be enabled
-		private boolean isAbled() {
-			hasCamera = getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA);
-			//num of apps that can respond this intent
-			nCameraApps = getApplicationContext().getPackageManager().queryIntentActivities(
-					new Intent(MediaStore.ACTION_IMAGE_CAPTURE),
-					PackageManager.MATCH_DEFAULT_ONLY).size();
-			Log.d(TAG, "# Camera Apps Founded: " + nCameraApps);
-			hasCameraApp = (nCameraApps > 0);
-			if (hasCamera && hasCameraApp) {
-				Log.i(TAG, getString(R.string.photo_taking_ok));
-				this.abled = true;
-			} else {
-				Log.w(TAG, getString(R.string.photo_taking_no));
-				this.abled = false;
-			}
-			return this.abled;
-		}
-		public boolean isEnabled() {
-			Log.d(TAG, "Photo taking isEnabled? " + this.enabled);
-			return this.enabled;
-		}
-		public PhotoTaking enable() {
-			Log.d(TAG, "Trying to enable Photo taking..");
-			this.enabled = isAbled();
-			return this;
-		}
-		public PhotoTaking disable() {
-			//disable taking photos
-			Log.d(TAG, "Trying to disable Photo taking..");
-			//reinforcer disable?
-			this.enabled = false;
-			Log.w(TAG, getString(R.string.photo_taking_no));
-			return this;
 		}
 	}
 

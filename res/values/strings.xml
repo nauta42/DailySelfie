@@ -2,12 +2,17 @@
 <resources>
 
     <string name="app_name">DailySelfie</string>
-    <string name="hello_world">Hello world!</string>
+    <string name="about">About&#8230;</string>
     <string name="action_settings">Settings</string>
-    <string name="no_camera">No camera present, can\'t take photos!</string>
+    <string name="action_share">Share</string>
     <string name="take_selfie">Take a new selfie!</string>
+
+    <string name="no_camera">No camera present, can\'t take photos!</string>
+    <string name="photo_taking_no">Photo taking NOT ready!</string>
+    <string name="photo_taking_ok">Photo taking is ready!</string>
     <string name="help_guide">Press and take a photo\n of yourself!</string>
     <string name="selfies_dirname">MySelfies</string>
     
-
+    <string name="TODO">TODO</string>
+    
 </resources>
