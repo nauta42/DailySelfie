@@ -12,6 +12,7 @@ public final class SelfiesContract {
 	//columns
 	public static final String _ID = "_id";
 	public static final String SELFIE_BITMAP_PATH = "selfieBitmapPath";
+	public static final String SELFIE_FILE_PATH = "selfieFilePath";
 	public static final String DATE = "date";
 	public static final String TIME = "time";
 

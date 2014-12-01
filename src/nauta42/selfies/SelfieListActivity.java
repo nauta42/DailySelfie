@@ -53,6 +53,7 @@ public class SelfieListActivity extends ListActivity implements LoaderCallbacks<
 	private PhotoTaking mPhotoTaking;
 	private Display mDisplay;
 	private SelfieListAdapter mAdapter;
+	public static final String EXTRA_MESSAGE = "nauta42.selfies.SelfieListActivity.SELFIE_FILE";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -152,13 +153,15 @@ public class SelfieListActivity extends ListActivity implements LoaderCallbacks<
 		if (requestCode == REQUEST_TAKE_SELFIE && resultCode == RESULT_OK) {
 			if (mCurrentSelfiePath != null) {
 				// SelfieRecord
-				int w = (int)getResources().getDimensionPixelSize(R.dimen.thumbnail_selfie_width);
-				int h = (int)getResources().getDimensionPixelSize(R.dimen.thumbnail_selfie_height);
-				Bitmap thumbnail = getScaledBitmap(w, h, mCurrentSelfiePath);
+				String selfieFilePath = "" + mCurrentSelfiePath;
 				Date d = new Date();
 				String date = (String) DateFormat.format("yyyyMMdd", d);
 				String time = (String) DateFormat.format("HHmmss", d);
-				SelfieRecord selfie = new SelfieRecord(mCurrentSelfiePath, date, time);
+				SelfieRecord selfie = new SelfieRecord(selfieFilePath, date, time);
+				//generate the thumbnail
+				int w = (int)getResources().getDimensionPixelSize(R.dimen.thumbnail_selfie_width);
+				int h = (int)getResources().getDimensionPixelSize(R.dimen.thumbnail_selfie_height);
+				Bitmap thumbnail = getScaledBitmap(w, h, mCurrentSelfiePath);
 				selfie.setSelfieBitmap(thumbnail);
 				Log.d(TAG, selfie.toString());
 				//

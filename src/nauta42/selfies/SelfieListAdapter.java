@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import nauta42.selfies.provider.SelfiesContract;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
@@ -90,25 +91,28 @@ public class SelfieListAdapter extends CursorAdapter {
 		ImageView selfie;
 		TextView date;
 		TextView time;
+		String selfieFile;
 	}
 
 	public void add(SelfieRecord listItem) {
 
-		String lastPathSegment = Uri.parse(listItem.getSelfieUrl())
+		String selfieFilePath = listItem.getSelfieFilePath();
+		String lastPathSegment = Uri.parse(listItem.getSelfieFilePath())
 				.getLastPathSegment();
 		Log.d(TAG, "lastPathSegment: " + lastPathSegment);
-		String filePath = mBitmapStoragePath + "/" + lastPathSegment;
-		Log.d(TAG, "filePath: " + filePath);
+		String bitmapFilePath = mBitmapStoragePath + "/" + lastPathSegment;
+		Log.d(TAG, "filePath: " + bitmapFilePath);
 		
-		if (storeBitmapToFile(listItem.getSelfieBitmap(), filePath)) {
+		if (storeBitmapToFile(listItem.getSelfieBitmap(), bitmapFilePath)) {
 
-			listItem.setSelfieBitmapPath(filePath);
+			listItem.setSelfieBitmapPath(bitmapFilePath);
 			list.add(listItem);
 
 			ContentValues values = new ContentValues();
 
 			// DONE - Insert new record into the ContentProvider
-			values.put(SelfiesContract.SELFIE_BITMAP_PATH, filePath);
+			values.put(SelfiesContract.SELFIE_FILE_PATH, selfieFilePath);
+			values.put(SelfiesContract.SELFIE_BITMAP_PATH, bitmapFilePath);
 			values.put(SelfiesContract.DATE, listItem.getDate());
 			values.put(SelfiesContract.TIME, listItem.getTime());
 			//
@@ -130,14 +134,34 @@ public class SelfieListAdapter extends CursorAdapter {
 	@Override
 	public void bindView(View view, Context context, Cursor cursor) {
 		ViewHolder holder = (ViewHolder) view.getTag();
-		holder.selfie.setImageBitmap(getBitmapFromFile(cursor.getString(cursor
-				.getColumnIndex(SelfiesContract.SELFIE_BITMAP_PATH))));
+		// Date and time
 		holder.date.setText(context.getString(R.string.date_string)
 				+ cursor.getString(cursor
 						.getColumnIndex(SelfiesContract.DATE)));
 		holder.time.setText(context.getString(R.string.time_string)
 				+ cursor.getString(cursor
 						.getColumnIndex(SelfiesContract.TIME)));
+		// selfie file full pathname
+		String selfieFile = cursor.getString(cursor.getColumnIndex(SelfiesContract.SELFIE_FILE_PATH));
+		holder.selfieFile = selfieFile;
+		// selfie thumbnail
+		holder.selfie.setImageBitmap(getBitmapFromFile(cursor.getString(cursor
+				.getColumnIndex(SelfiesContract.SELFIE_BITMAP_PATH))));
+
+		holder.selfie.setTag(selfieFile);
+		//TODO listener al click
+		holder.selfie.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				// TODO Auto-generated method stub
+				String msg = (String )v.getTag();
+				Log.d(TAG, "msg tag: " + msg);
+				Intent intent = new Intent(mContext, SelfieDetailActivity.class);
+				intent.putExtra(SelfieListActivity.EXTRA_MESSAGE, msg);
+				intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+				mContext.startActivity(intent);
+			}
+		});
 	}
 
 	@Override
@@ -148,6 +172,7 @@ public class SelfieListAdapter extends CursorAdapter {
 		holder.selfie = (ImageView) newView.findViewById(R.id.selfie1);
 		holder.date = (TextView) newView.findViewById(R.id.date1);
 		holder.time = (TextView) newView.findViewById(R.id.time1);
+		holder.selfieFile = "";
 		newView.setTag(holder);
 		return newView;
 	}

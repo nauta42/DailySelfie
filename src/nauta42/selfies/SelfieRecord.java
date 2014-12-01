@@ -5,7 +5,7 @@ import android.graphics.Bitmap;
 public class SelfieRecord {
 
 	// URL for retrieving the ORIGINAL selfie image
-	private String mSelfieUrl;
+	private String mSelfieFilePath;
 
 	// path to flag image in external memory
 	private String mSelfieBitmapPath;
@@ -15,16 +15,16 @@ public class SelfieRecord {
 	private Bitmap mSelfieBitmap;  //bitmap
 
 
-	public SelfieRecord(String selfieUrl, String selfieBitmapPath,
+	public SelfieRecord(String selfieFilePath, String selfieBitmapPath,
 			String date, String time) {
-		mSelfieUrl = selfieUrl;
+		mSelfieFilePath = selfieFilePath;
 		mSelfieBitmapPath = selfieBitmapPath;
 		mDate = date;
 		mTime = time;
 	}
 
 	public SelfieRecord(String selfieUrl, String date, String time) {
-		mSelfieUrl = selfieUrl;
+		mSelfieFilePath = selfieUrl;
 		mDate = date;
 		mTime = time;
 	}
@@ -32,12 +32,12 @@ public class SelfieRecord {
 	public SelfieRecord() {	
 	}
 
-	public String getSelfieUrl() {
-		return mSelfieUrl;
+	public String getSelfieFilePath() {
+		return mSelfieFilePath;
 	}
 	
-	public void setSelfieUrl(String selfieUrl) {
-		this.mSelfieUrl = selfieUrl;
+	public void setSelfieFilePath(String selfieFilePath) {
+		this.mSelfieFilePath = selfieFilePath;
 	}
 
 	public String getDate() {
@@ -66,7 +66,7 @@ public class SelfieRecord {
 
 	@Override
 	public String toString() {
-		return "Date: " + mDate + " Time: " + mTime +  " SelfiePath: " + mSelfieUrl;
+		return "Date: " + mDate + " Time: " + mTime +  " SelfiePath: " + mSelfieFilePath;
 
 	}
 
