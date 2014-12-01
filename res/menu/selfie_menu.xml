@@ -5,25 +5,32 @@
     
     <item
         android:id="@+id/menu_take_selfie"
-        android:icon="@android:drawable/ic_menu_camera"
         android:showAsAction="always"
+        android:icon="@android:drawable/ic_menu_camera"
         android:title="@string/take_selfie"/>
     <item
+        android:id="@+id/menu_help_guide"
+        android:showAsAction="always"
+        android:icon="@android:drawable/ic_menu_help"
+        android:title="@string/help_guide"/>
+    <item
         android:id="@+id/menu_action_share"
-        android:icon="@android:drawable/ic_menu_camera"
         android:showAsAction="ifRoom"
-        android:title="@string/action_share"
-        android:actionProviderClass="android.widget.ShareActionProvider"/>
+        android:actionProviderClass="android.widget.ShareActionProvider"
+        android:icon="@android:drawable/ic_menu_camera"
+        android:title="@string/action_share"/>
     <item
         android:id="@+id/menu_action_settings"
-        android:orderInCategory="100"
         android:showAsAction="ifRoom"
-        android:title="@string/action_settings"
-        android:icon="@android:drawable/ic_menu_preferences"/>
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:title="@string/action_settings"/>
+    <item
+        android:id="@+id/menu_delete_selfies"
+        android:showAsAction="never"
+        android:title="@string/delete_selfies"/>
     <item
         android:id="@+id/menu_about"
         android:showAsAction="never"
-        android:title="@string/about"
-        android:icon="@android:drawable/ic_menu_preferences"/>
+        android:title="@string/about"/>
     
 </menu>

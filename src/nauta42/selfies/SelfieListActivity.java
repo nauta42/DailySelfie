@@ -1,14 +1,21 @@
-package dailyselfie.app;
+package nauta42.selfies;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Date;
 
-import android.app.Activity;
+import nauta42.selfies.provider.SelfiesContract;
+import android.app.AlertDialog;
+import android.app.ListActivity;
+import android.app.LoaderManager.LoaderCallbacks;
 import android.content.Context;
+import android.content.CursorLoader;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.Loader;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -25,21 +32,16 @@ import android.view.Display;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.view.WindowManager;
-import android.widget.CompoundButton;
-import android.widget.CompoundButton.OnCheckedChangeListener;
-import android.widget.Gallery;
 import android.widget.ImageView;
+import android.widget.ListView;
 import android.widget.ShareActionProvider;
 import android.widget.Toast;
-import android.widget.ToggleButton;
 
-public class SelfieActivity extends Activity {
-	private static final String TAG = "Daily-Selfie-App"; 
+public class SelfieListActivity extends ListActivity implements LoaderCallbacks<Cursor> {
+	private static final String TAG = "DailySelfie_ListActivity"; 
 	private ImageView mImageView1;
-	private ImageView mImageView2;
-	private Gallery mGallery1;
-	private ToggleButton mToggleButton1;
 	private static final int REQUEST_TAKE_SELFIE = 1;
 	private String mCurrentSelfiePath;
 	private static final String SELFIE_FILE_PREFIX = "SELFIE_";
@@ -50,68 +52,49 @@ public class SelfieActivity extends Activity {
 	private ShareActionProvider mShareActionProvider;
 	private PhotoTaking mPhotoTaking;
 	private Display mDisplay;
+	private SelfieListAdapter mAdapter;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.selfie_main_layout);
-		//
-		mImageView1 = (ImageView) findViewById(R.id.imageView1);
-		mImageView2 = (ImageView) findViewById(R.id.imageView2);
-		mGallery1 = (Gallery) findViewById(R.id.gallery1);
-		registerForContextMenu(mImageView1);  //N42 Long presses invoke Context Menu
-		//
-		mToggleButton1 = (ToggleButton) findViewById(R.id.toggleButton1);
-		mToggleButton1.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+		ListView selfiesListView = getListView();
+		//footer
+		selfiesListView.setFooterDividersEnabled(true);
+		View footerView = getLayoutInflater().inflate(R.layout.footer_view, selfiesListView, false);
+		footerView.setOnClickListener(new OnClickListener() {
 			@Override
-			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-				//
-				Log.d(TAG, "ToogleButton state: " + isChecked);
-				if(isChecked){
-					if(!mPhotoTaking.enable().isEnabled()) {
-						buttonView.toggle();
-					}
-				} else {
-					mPhotoTaking.disable();  //N42 disable photo taking
-				}
-				invalidateOptionsMenu(); //
+			public void onClick(View arg0) {
+				Log.d(TAG, "Entered footerView.OnClickListener.onClick()");
+				takeSelfie();
 			}
 		});
+		selfiesListView.addFooterView(footerView);
+		//
+		mAdapter = new SelfieListAdapter(getApplicationContext(), null, 0);
+		setListAdapter(mAdapter);
+		// Prepare the loader.  Either re-connect with an existing one,
+		// or start a new one, relates to CursorLoader
+		getLoaderManager().initLoader(0, null, this);
+
 		//verify if is posible photo taking
 		mPhotoTaking = new PhotoTaking();
 		if (!mPhotoTaking.isEnabled()) {
-			mToggleButton1.setChecked(false);
+			new AlertDialog.Builder(this).
+			setMessage(R.string.no_camera)
+			.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+				@Override
+				public void onClick(DialogInterface dialog, int which) {
+					// nothing to do
+				}
+			}).show();
+			footerView.setEnabled(false);
 			invalidateOptionsMenu();
 		}
 		//N42 get display rotation
 		mDisplay = ((WindowManager) getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay(); 
 		int rot = mDisplay.getRotation();Log.d(TAG, "Display rotation: " + rot);
-		//
+		//??
 		mImageBitmap = null;
-		//
-
-	}
-
-	//N42 Dispatch an intent for other app take the selfie
-	private void takeSelfie() {
-		Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-		File selfieFile = null;
-		try {
-			// Create a temporal file
-			String timeStamp = (String) DateFormat.format("yyyyMMdd_HHmmss", new Date());
-			String imageFileName = SELFIE_FILE_PREFIX + timeStamp + "_";
-			selfieFile = File.createTempFile(imageFileName, SELFIE_FILE_SUFFIX, getSelfiesDir());
-			Log.d(TAG, "selfieFile: " + selfieFile.getName());
-			mCurrentSelfiePath = selfieFile.getAbsolutePath();
-			Log.d(TAG, "mCurrentSelfiePath: " + mCurrentSelfiePath);
-			//completes intent
-			takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(selfieFile));
-		} catch (IOException e) {
-			e.printStackTrace();
-			selfieFile = null;
-			mCurrentSelfiePath = null;
-		}
-		startActivityForResult(takePictureIntent, REQUEST_TAKE_SELFIE);
 	}
 
 	private File getSelfiesDir() {
@@ -121,6 +104,7 @@ public class SelfieActivity extends Activity {
 			selfiesDir = (new File(Environment.getExternalStoragePublicDirectory(
 					Environment.DIRECTORY_PICTURES), getString(R.string.selfies_dirname)));
 			Log.i(TAG, "storageDir: " + selfiesDir.getAbsolutePath());
+			//uses (or creates) a dir for the selfies
 			if (selfiesDir != null && !selfiesDir.mkdirs() && !selfiesDir.exists()) {
 				Log.e(TAG, "failed to create directory");
 				return null;
@@ -131,94 +115,62 @@ public class SelfieActivity extends Activity {
 		return selfiesDir;
 	}
 
+	private File createImageFile() throws IOException {
+	    // Create an image file name
+		File selfieFile = null;
+		String timeStamp = (String) DateFormat.format("yyyyMMdd_HHmmss", new Date());
+		String imageFileName = SELFIE_FILE_PREFIX + timeStamp + "_";
+	    selfieFile = File.createTempFile(imageFileName, SELFIE_FILE_SUFFIX, getSelfiesDir());
+		Log.d(TAG, "selfieFile: " + selfieFile.getName());
+	    // Save a file: path for use with ACTION_VIEW intents
+		mCurrentSelfiePath = selfieFile.getAbsolutePath();
+	    //mCurrentSelfiePath = "file:" + selfieFile.getAbsolutePath();
+		Log.d(TAG, "mCurrentSelfiePath: " + mCurrentSelfiePath);
+	    return selfieFile;
+	}
+	
+	//N42 Dispatch an intent for other app take the selfie
+	private void takeSelfie() {
+		Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+		File selfieFile = null;
+		try {
+			selfieFile = createImageFile();  // Create a temporal file
+		} catch (IOException e) {
+			e.printStackTrace();
+			selfieFile = null;
+			mCurrentSelfiePath = null;
+		}
+		if(selfieFile != null) {
+			//completes intent with the file
+			takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(selfieFile));
+			startActivityForResult(takePictureIntent, REQUEST_TAKE_SELFIE);
+		}
+	}
+
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		if (requestCode == REQUEST_TAKE_SELFIE && resultCode == RESULT_OK) {
-			//get the thumbnail
-			//Bundle extras = data.getExtras();
-			//Bitmap thumbnailBitmap = (Bitmap) extras.get("data");
-	        //mImageView2.setImageBitmap(thumbnailBitmap);
 			if (mCurrentSelfiePath != null) {
-				setPic();
+				// SelfieRecord
+				int w = (int)getResources().getDimensionPixelSize(R.dimen.thumbnail_selfie_width);
+				int h = (int)getResources().getDimensionPixelSize(R.dimen.thumbnail_selfie_height);
+				Bitmap thumbnail = getScaledBitmap(w, h, mCurrentSelfiePath);
+				Date d = new Date();
+				String date = (String) DateFormat.format("yyyyMMdd", d);
+				String time = (String) DateFormat.format("HHmmss", d);
+				SelfieRecord selfie = new SelfieRecord(mCurrentSelfiePath, date, time);
+				selfie.setSelfieBitmap(thumbnail);
+				Log.d(TAG, selfie.toString());
+				//
+				mAdapter.add(selfie);
+				//
 				galleryAddPic();
 				mCurrentSelfiePath = null;
 			}
 		}
 	}
 
-	private void setPic() {
-		/* There isn't enough memory to open up more than a couple camera photos */
-		/* So pre-scale the target bitmap into which the file is decoded */
-		/* Get the size of the ImageView */
-		int targetW = mImageView1.getWidth();
-		int targetH = mImageView1.getHeight();
-
-		/* Get the size of the image */
-		BitmapFactory.Options bmOptions = new BitmapFactory.Options();
-		bmOptions.inJustDecodeBounds = true;
-		BitmapFactory.decodeFile(mCurrentSelfiePath, bmOptions);
-		int photoW = bmOptions.outWidth;
-		int photoH = bmOptions.outHeight;
-		
-		/* Figure out which way needs to be reduced less */
-		int scaleFactor = 1;
-		//N42 TODO would be instead: (targetW > 0) && (targetH > 0) ??
-		if ((targetW > 0) || (targetH > 0)) {
-			scaleFactor = Math.min(photoW/targetW, photoH/targetH);	
-		}
-
-		/* Set bitmap options to scale the image decode target */
-		bmOptions.inJustDecodeBounds = false;
-		bmOptions.inSampleSize = scaleFactor;
-		bmOptions.inPurgeable = true;
-
-		//N42 problema camara rotada
-		int rotateDegrees = 0;
-		ExifInterface ei;
-		int orientation;
-		try {
-			ei = new ExifInterface(mCurrentSelfiePath);
-			orientation = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-			Log.d(TAG, "Exif ORIENTATION: " + orientation);
-			switch(orientation) {
-		    case ExifInterface.ORIENTATION_NORMAL:
-		    	rotateDegrees = 0;
-				Log.d(TAG, "Exif ORIENTATION_NORMAL, rotate(degrees): " + rotateDegrees);
-		        break;
-		    case ExifInterface.ORIENTATION_ROTATE_90:
-		    	rotateDegrees = 90;
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_90, rotate(degrees): " + rotateDegrees);
-		        break;
-		    case ExifInterface.ORIENTATION_ROTATE_180:
-		    	rotateDegrees = 180;
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_180, rotate(degrees): " + rotateDegrees);
-		        break;
-		    case ExifInterface.ORIENTATION_ROTATE_270:
-		    	rotateDegrees = 270;
-				Log.d(TAG, "Exif ORIENTATION_ROTATE_270, rotate(degrees): " + rotateDegrees);
-		        break;
-		    default:
-				Log.d(TAG, "Exif ORIENTATION_UNDEFINED or OTHERS, rotate(degrees): " + rotateDegrees);
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		};
-		/* Decode the JPEG file into a Bitmap */
-		Bitmap bitmap1 = BitmapFactory.decodeFile(mCurrentSelfiePath, bmOptions);
-		//N42 rotate the bitmap, recycles bitmap
-		bitmap1 = RotateBitmap(bitmap1, rotateDegrees);
-		/* Associate the Bitmap to the ImageView */
-		mImageView1.setImageBitmap(bitmap1);
-		mImageView1.setVisibility(View.VISIBLE);
-
-		//thumbnail from bitmap already rotated
-		mImageView2.setMaxHeight(targetH/3);
-		mImageView2.setMaxWidth(targetW/3);
-		//Bitmap bitmap2 = Bitmap.createScaledBitmap(bitmap1, mImageView2.getWidth(), mImageView2.getHeight(), false);
-		mImageView2.setImageBitmap(bitmap1);
-		mImageView2.setVisibility(View.VISIBLE);
-	}
-
+	//add the selfie to the Media Provider's database, making it available to other apps
 	private void galleryAddPic() {
 		    Intent mediaScanIntent = new Intent("android.intent.action.MEDIA_SCANNER_SCAN_FILE");
 			File f = new File(mCurrentSelfiePath);
@@ -227,6 +179,84 @@ public class SelfieActivity extends Activity {
 		    this.sendBroadcast(mediaScanIntent);
 	}
 
+	//decode a scaled image to reduce the amount of used memory
+	public Bitmap getScaledBitmap(int width, int height, String filePath) {
+	    // Get the dimensions of the View
+		int targetW = width;
+		int targetH = height;
+
+	    // Get the dimensions of the bitmap
+		BitmapFactory.Options bmOptions = new BitmapFactory.Options();
+		bmOptions.inJustDecodeBounds = true;
+		BitmapFactory.decodeFile(filePath, bmOptions);
+		int photoW = bmOptions.outWidth;
+		int photoH = bmOptions.outHeight;
+
+	    // Determine how much to scale down the image
+		int scaleFactor = 1;
+		if ((targetW > 0) || (targetH > 0)) {
+			scaleFactor = Math.min(photoW/targetW, photoH/targetH);	
+		}
+
+	    // Decode the image file into a Bitmap sized to fill the View
+		bmOptions.inJustDecodeBounds = false;
+		bmOptions.inSampleSize = scaleFactor;
+		bmOptions.inPurgeable = true;
+		Bitmap bitmap1 = BitmapFactory.decodeFile(filePath, bmOptions);
+		
+		//N42 gets the image rotation if the camera app returns the photo rotated
+		int rotateDegrees = 0;  //future rotation for correction
+		ExifInterface ei;
+		int orientation;
+		try {
+			ei = new ExifInterface(filePath);
+			orientation = ei.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+			Log.d(TAG, "Exif ORIENTATION: " + orientation);
+			String logMsg = "Exif ORIENTATION";
+			switch(orientation) {
+		    case ExifInterface.ORIENTATION_NORMAL:
+		    	rotateDegrees = 0; logMsg += "_NORMAL, rotate(degrees): ";
+		        break;
+		    case ExifInterface.ORIENTATION_ROTATE_90:
+		    	rotateDegrees = 90; logMsg += "_ROTATE_90, rotate(degrees): ";
+		        break;
+		    case ExifInterface.ORIENTATION_ROTATE_180:
+		    	rotateDegrees = 180; logMsg += "_ROTATE_180, rotate(degrees): ";
+		        break;
+		    case ExifInterface.ORIENTATION_ROTATE_270:
+		    	rotateDegrees = 270; logMsg += "_ROTATE_270, rotate(degrees): ";
+		        break;
+		    default:
+		    	logMsg += "_UNDEFINED or OTHERS, rotate(degrees): ";
+			}
+			Log.d(TAG, logMsg + rotateDegrees);
+		} catch (IOException e) {
+			e.printStackTrace();
+		};
+
+		//N42 rotate, recycle and display bitmap
+		bitmap1 = RotateBitmap(bitmap1, rotateDegrees);
+		return bitmap1;
+		//imageView.setImageBitmap(bitmap1);
+		//imageView.setVisibility(View.VISIBLE);
+		//
+		//mBitmap1 = bitmap1.copy(bitmap1.getConfig(), false);
+		//N42 thumbnail from bitmap already rotated
+		//mImageView2.setMaxHeight(targetH/3);
+		//mImageView2.setMaxWidth(targetW/3);
+		//mImageView2.setImageBitmap(bitmap1);
+		//mImageView2.setVisibility(View.VISIBLE);
+	}
+
+	public static Bitmap RotateBitmap(Bitmap source, float angle)
+	{
+	      Matrix matrix = new Matrix();
+	      matrix.postRotate(angle);
+	      return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+	}
+	
+
+	
 	@Override
 	public void onConfigurationChanged(Configuration newConfig) {
 	    super.onConfigurationChanged(newConfig);
@@ -281,13 +311,23 @@ public class SelfieActivity extends Activity {
 		// Handle action bar item clicks here.
 		switch (item.getItemId()) {
 		case R.id.menu_take_selfie:
-			Log.d(TAG, "menu_take_selfie");
 			takeSelfie();
+			return true;
+		case R.id.menu_help_guide:
+			Toast.makeText(getApplicationContext(),
+					getText(R.string.help_guide),
+					Toast.LENGTH_LONG).show();
 			return true;
 		case R.id.menu_action_settings:
 			Toast.makeText(getApplicationContext(),
 					getText(R.string.action_settings),
 					Toast.LENGTH_LONG).show();
+			return true;
+		case R.id.menu_delete_selfies:
+			Toast.makeText(getApplicationContext(),
+					getText(R.string.delete_selfies),
+					Toast.LENGTH_LONG).show();
+			mAdapter.removeAllViews();
 			return true;
 		case R.id.menu_about:
 			Toast.makeText(getApplicationContext(),
@@ -307,33 +347,25 @@ public class SelfieActivity extends Activity {
 		//N42 switch each context menu 
 		if(v.getId() == R.id.imageView1){
 			getMenuInflater().inflate(R.menu.selfie_context_menu, menu);
+			//N42 disable photo taking
+			menu.findItem(R.id.context_menu_take_selfie).setEnabled(mPhotoTaking.isEnabled());
 		}
 	}
 	@Override
 	public boolean onContextItemSelected(MenuItem item) {
 		//N42 ignore logcat ERROR for SAMSUNG GALAXY S3
 		switch (item.getItemId()) {
-		case R.id.context_menu_help_guide:
+		case R.id.context_menu_details:
 			Toast.makeText(getApplicationContext(),
-					getText(R.string.help_guide),
+					getText(R.string.TODO),
 					Toast.LENGTH_LONG).show();
 			return true;
 		case R.id.context_menu_take_selfie:
-			Toast.makeText(getApplicationContext(),
-					getText(R.string.take_selfie),
-					Toast.LENGTH_LONG).show();
+			takeSelfie();
 			return true;
 		default:
 			return false;
 		}
-	}
-	
-	//  ********** Helper class **********
-	public static Bitmap RotateBitmap(Bitmap source, float angle)
-	{
-	      Matrix matrix = new Matrix();
-	      matrix.postRotate(angle);
-	      return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
 	}
 	
 	//  ********** Helper class **********
@@ -384,6 +416,25 @@ public class SelfieActivity extends Activity {
 			Log.w(TAG, getString(R.string.photo_taking_no));
 			return this;
 		}
+	}
+
+	// LoaderCallback methods
+	@Override
+	public Loader<Cursor> onCreateLoader(int id, Bundle args) {
+		//Create a new CursorLoader and return it
+		return new CursorLoader(this, SelfiesContract.CONTENT_URI, null, null, null, null);
+	}
+
+	@Override
+	public void onLoadFinished(Loader<Cursor> loader, Cursor newCursor) {
+		// Swap in the newCursor
+		mAdapter.swapCursor(newCursor);
+	}
+
+	@Override
+	public void onLoaderReset(Loader<Cursor> loader) {
+		// swap in a null Cursor
+		mAdapter.swapCursor(null);
 	}
 
 }
